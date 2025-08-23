@@ -5,7 +5,7 @@ The workflow demonstrates key steps in a typical next-generation sequencing (NGS
 
 ---
 
-## 📌 Project Overview
+## Project Overview
 This project focuses on building a **reproducible RNA-seq pipeline** using publicly available datasets and widely adopted bioinformatics tools.  
 The pipeline processes paired-end reads, performs quality control, aligns reads to a reference genome, marks duplicates, and prepares the data for downstream analyses such as **gene expression quantification** and **splicing detection**.
 
@@ -20,7 +20,7 @@ The pipeline processes paired-end reads, performs quality control, aligns reads 
 
 ---
 
-## 🧰 Software & Tools Used
+## Software & Tools Used
 
 | Tool / Software      | Version   | Purpose |
 |----------------------|-----------|----------------------------------------------|
@@ -34,7 +34,7 @@ The pipeline processes paired-end reads, performs quality control, aligns reads 
 
 ---
 
-## 🖥️ Running on Cardiff University's HAWK Supercomputer
+## Running on Cardiff University's HAWK Supercomputer
 
 This project was executed on **Cardiff University's HAWK supercomputer**, a high-performance computing (HPC) cluster that uses the **SLURM** workload manager.  
 The HAWK system provides the **memory, CPUs, and parallel processing capabilities** required for handling large-scale RNA-seq datasets.

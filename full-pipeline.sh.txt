@@ -1,0 +1,275 @@
+# 1: download the fastq files
+wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR270/003/ERR2704713/ERR2704713_1.fastq.gz
+wget ftp://ftp.sra.ebi.ac.uk/vol1/fastq/ERR270/003/ERR2704713/ERR2704713_2.fastq.gz
+
+# 2: Subsetting the top 200,000 reads from the files 
+gunzip -c ERR2704713_1.fastq.gz | head -n 800000 | gzip > ERR2704713_subset_1.fastq.gz
+gunzip -c ERR2704713_2.fastq.gz | head -n 800000 | gzip > ERR2704713_subset_2.fastq.gz
+
+# 3: Download reference genome to the resources folder
+wget https://hgdownload.soe.ucsc.edu/goldenpath/hg38/chromosomes/chr21.fa.gz
+
+# QC reference genome, if it returns 1 then this is a pass (it did)
+gunzip -c chr21.fa.gz | grep "^>" | wc -l
+
+# 4: download the GTF files to the resources folder 
+
+wget https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_44/gencode.v44.annotation.gtf.gz
+
+# unzip the 
+GTFgunzip gencode.v44.annotation.gtf.gz
+
+# Filter to keep only the chromosome 21 annotations
+grep -P "^chr21\t" gencode.v44.annotation.gtf > chr21.gtf 
+
+### PART 5:
+# 5a: Trimming with trimmomatic 
+
+#!/bin/bash
+
+sampleIDs=("ERR2704713_subset")
+contamFile="TruSeq3-PE.fa"
+
+userProject="scw1557"
+mem="20G"
+nodes="1"
+runTime="00:05:00"
+
+myDir=$(pwd)
+scriptBase="02"
+jobName="ADtrim"
+
+## loop over each sample in turn
+
+for sampleID in "${sampleIDs[@]}"
+do
+
+	## write a script to the temp/ directory (one for each sample)
+
+	scriptName=${myDir}/../temp/${scriptBase}.${sampleID}.sh
+
+	## remove the script if it exists already
+
+	rm -rf ${scriptName} || true
+
+	## make an empty script for writing
+
+	touch ${scriptName}
+
+	## write the SLURM parameters to the top of the script
+
+	echo "#!/bin/bash" >> ${scriptName} 
+        echo "#SBATCH -p compute" >> ${scriptName}
+        echo "#SBATCH --mem=${mem}" >> ${scriptName}
+        echo "#SBATCH --ntasks=${nodes}" >> ${scriptName}
+        echo "#SBATCH --tasks-per-node=${nodes}" >> ${scriptName}
+        echo "#SBATCH -t ${runTime}" >> ${scriptName}
+        echo "#SBATCH -o ${myDir}/OUT/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH -e ${myDir}/ERR/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH --job-name=${jobName}" >> ${scriptName}
+        echo "#SBATCH --account=${userProject}" >> ${scriptName}
+
+	## load the java and trimmomatic modules
+
+	echo "module load java/1.8" >> ${scriptName}	
+	echo "module load trimmomatic/0.38" >> ${scriptName}	
+
+	## make a directory for each sample under the ../output/ directory
+
+	echo "mkdir -p ${myDir}/../output/${sampleID}/trimmomatic" >> ${scriptName}	
+
+	## run the trimmomatic command
+
+	echo "java -jar /apps/genomics/trimmomatic/0.38/trimmomatic-0.38.jar PE -phred33 \
+${myDir}/../input/${sampleID}_1.fastq.gz ${myDir}/../input/${sampleID}_2.fastq.gz \
+${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim_1.fq.gz \
+${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim.unpaired_1.fq.gz \
+${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim_2.fq.gz \
+${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim.unpaired_2.fq.gz \
+ILLUMINACLIP:${myDir}/../resources/${contamFile}:2:30:10 \
+LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:26" >> ${scriptName}
+
+	## make the script into an 'executable'
+
+	chmod u+x ${scriptName}
+
+	## submit the script to the compute queue
+
+	sbatch ${scriptName}
+
+done
+
+# 5b: FastQC
+
+#!/bin/bash
+
+sampleIDs=("ERR2704713_subset")
+
+userProject="scw1557"
+mem="20G"
+nodes="1"
+runTime="00:05:00"
+
+myDir=$(pwd)
+scriptBase="03"
+jobName="ADqc"
+
+
+for sampleID in "${sampleIDs[@]}"
+do
+	scriptName=${myDir}/../temp/${scriptBase}.${sampleID}.sh
+	rm -rf ${scriptName} || true
+	touch ${scriptName}
+
+	echo "#!/bin/bash" >> ${scriptName} 
+        echo "#SBATCH -p compute" >> ${scriptName}
+        echo "#SBATCH --mem=${mem}" >> ${scriptName}
+        echo "#SBATCH --ntasks=${nodes}" >> ${scriptName}
+        echo "#SBATCH --tasks-per-node=${nodes}" >> ${scriptName}
+        echo "#SBATCH -t ${runTime}" >> ${scriptName}
+        echo "#SBATCH -o ${myDir}/OUT/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH -e ${myDir}/ERR/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH --job-name=${jobName}" >> ${scriptName}
+        echo "#SBATCH --account=${userProject}" >> ${scriptName}
+
+	echo "module load java/1.8" >> ${scriptName}	
+	echo "module load FastQC/0.11.8" >> ${scriptName}	
+
+	echo "mkdir -p ${myDir}/../output/${sampleID}/fastqc/raw/" >> ${scriptName}	
+	echo "mkdir -p ${myDir}/../output/${sampleID}/fastqc/trimmed/" >> ${scriptName}	
+
+	## run fastqc on the raw fastq
+
+	echo "fastqc -o ${myDir}/../output/${sampleID}/fastqc/raw/ ${myDir}/../input/${sampleID}_1.fastq.gz ${myDir}/../input/${sampleID}_2.fastq.gz" >> ${scriptName}	
+
+	## run fastqc on the trimmed fastq
+
+	echo "fastqc -o ${myDir}/../output/${sampleID}/fastqc/trimmed/ ${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim_1.fq.gz ${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim_2.fq.gz" >> ${scriptName}	
+
+
+	chmod u+x ${scriptName}
+
+	sbatch ${scriptName}
+
+done
+
+# 5c: Indexing 
+
+#!/bin/bash
+
+#SBATCH -p compute
+#SBATCH --mem=20G
+#SBATCH --ntasks=4
+#SBATCH --tasks-per-node=4
+#SBATCH -t 00:05:00
+#SBATCH -o OUT/01index.%J
+#SBATCH -e ERR/01index.%J
+#SBATCH --job-name=ADindex
+#SBATCH --account=scw1557
+
+myDir=$(pwd)
+genomeRef='chr21.fa'
+gtf='chr21.gtf'
+ 
+module load STAR/2.7.0e
+
+STAR --runThreadN 4 --runMode genomeGenerate --genomeDir ${myDir}/../resources/ --genomeFastaFiles ${myDir}/../resources/${genomeRef} --sjdbGTFfile ${myDir}/../resources/${gtf} --sjdbOverhang 49
+
+# 5d: Mapping
+#!/bin/bash
+
+sampleIDs=("ERR2704713_subset")
+
+userProject="scw1557"
+mem="40G"
+nodes="4"
+runTime="00:25:00"
+
+myDir=$(pwd)
+scriptBase="04"
+jobName="ADmap"
+
+
+for sampleID in "${sampleIDs[@]}"
+do
+	scriptName=${myDir}/../temp/${scriptBase}.${sampleID}.sh
+	rm -rf ${scriptName} || true
+	touch ${scriptName}
+
+	echo "#!/bin/bash" >> ${scriptName} 
+        echo "#SBATCH -p compute" >> ${scriptName}
+        echo "#SBATCH --mem=${mem}" >> ${scriptName}
+        echo "#SBATCH --ntasks=${nodes}" >> ${scriptName}
+        echo "#SBATCH --tasks-per-node=${nodes}" >> ${scriptName}
+        echo "#SBATCH -t ${runTime}" >> ${scriptName}
+        echo "#SBATCH -o ${myDir}/OUT/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH -e ${myDir}/ERR/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH --job-name=${jobName}" >> ${scriptName}
+        echo "#SBATCH --account=${userProject}" >> ${scriptName}
+
+        echo "module load STAR/2.7.0e" >> ${scriptName}
+
+	echo "mkdir -p ${myDir}/../output/${sampleID}/star/" >> ${scriptName}	
+
+	## run the star mapping command
+
+	echo "STAR --readFilesCommand zcat --outSAMunmapped Within KeepPairs --outMultimapperOrder Random --outSAMmultNmax 1 --runThreadN ${nodes} --runMode alignReads --quantMode GeneCounts --outSAMtype BAM SortedByCoordinate --outFileNamePrefix ${myDir}/../output/${sampleID}/star/${sampleID}.onemap. --genomeDir ${myDir}/../resources/ --readFilesIn ${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim_1.fq.gz ${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim_2.fq.gz" >> ${scriptName}
+
+	chmod u+x ${scriptName}
+
+	sbatch ${scriptName}
+done
+
+# 5e: Mark duplicates
+#!/bin/bash
+
+sampleIDs=("ERR2704713_subset")
+
+userProject="scw1557"
+mem="40G"
+nodes="4"
+runTime="00:05:00"
+
+myDir=$(pwd)
+scriptBase="05"
+jobName="ADmarkdup"
+
+
+for sampleID in "${sampleIDs[@]}"
+do
+        scriptName=${myDir}/../temp/${scriptBase}.${sampleID}.sh
+        rm -rf ${scriptName} || true
+        touch ${scriptName}
+
+        echo "#!/bin/bash" >> ${scriptName}
+        echo "#SBATCH -p compute" >> ${scriptName}
+        echo "#SBATCH --mem=${mem}" >> ${scriptName}
+        echo "#SBATCH --ntasks=${nodes}" >> ${scriptName}
+        echo "#SBATCH --tasks-per-node=${nodes}" >> ${scriptName}
+        echo "#SBATCH -t ${runTime}" >> ${scriptName}
+        echo "#SBATCH -o ${myDir}/OUT/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH -e ${myDir}/ERR/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH --job-name=${jobName}" >> ${scriptName}
+        echo "#SBATCH --account=${userProject}" >> ${scriptName}
+
+        echo "module load picard/2.20.2" >> ${scriptName}
+        echo "module load java/1.8" >> ${scriptName}
+        echo "module load samtools/1.9" >> ${scriptName}
+
+        echo "mkdir -p ${myDir}/../output/${sampleID}/markduplicates/" >> ${scriptName}
+
+        ## run the markduplicate and samtools sort commands
+
+	echo "java -jar /software/genomics/picard/2.20.2/INSTALL/picard.jar MarkDuplicates I=${myDir}/../output/${sampleID}/star/{sampleID}.onemap.Aligned.sortedByCoord.out.bam O=${myDir}/../output/${sampleID}/markduplicates/${sampleID}.markdup.bam M=${myDir}/../output/${sampleID}/markduplicates/${sampleID}.metrics.markdup.txt REMOVE_DUPLICATES=false VALIDATION_STRINGENCY=SILENT" >> ${scriptName}
+
+	echo "java -jar /software/genomics/picard/2.20.2/INSTALL/picard.jar MarkDuplicates I=${myDir}/../output/${sampleID}/star/${sampleID}.onemap.Aligned.sortedByCoord.out.bam O=${myDir}/../output/${sampleID}/markduplicates/${sampleID}.rmdup.bam M=${myDir}/../output/${sampleID}/markduplicates/${sampleID}.metrics.rmdup.txt REMOVE_DUPLICATES=true VALIDATION_STRINGENCY=SILENT" >> ${scriptName}
+
+	echo "samtools index ${myDir}/../output/${sampleID}/markduplicates/${sampleID}.markdup.bam" >> ${scriptName}
+	echo "samtools index ${myDir}/../output/${sampleID}/markduplicates/${sampleID}.rmdup.bam" >> ${scriptName}
+
+        chmod u+x ${scriptName}
+
+        sbatch ${scriptName}
+done
+
+

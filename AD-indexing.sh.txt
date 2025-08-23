@@ -1,0 +1,20 @@
+
+#!/bin/bash
+
+#SBATCH -p compute
+#SBATCH --mem=20G
+#SBATCH --ntasks=4
+#SBATCH --tasks-per-node=4
+#SBATCH -t 00:05:00
+#SBATCH -o OUT/01index.%J
+#SBATCH -e ERR/01index.%J
+#SBATCH --job-name=ADindex
+#SBATCH --account=scw1557
+
+myDir=$(pwd)
+genomeRef='chr21.fa'
+gtf='chr21.gtf'
+ 
+module load STAR/2.7.0e
+
+STAR --runThreadN 4 --runMode genomeGenerate --genomeDir ${myDir}/../resources/ --genomeFastaFiles ${myDir}/../resources/${genomeRef} --sjdbGTFfile ${myDir}/../resources/${gtf} --sjdbOverhang 49

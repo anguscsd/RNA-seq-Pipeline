@@ -1,0 +1,50 @@
+#!/bin/bash
+
+sampleIDs=("ERR2704713_subset")
+
+userProject="scw1557"
+mem="40G"
+nodes="4"
+runTime="00:05:00"
+
+myDir=$(pwd)
+scriptBase="05"
+jobName="ADmarkdup"
+
+
+for sampleID in "${sampleIDs[@]}"
+do
+        scriptName=${myDir}/../temp/${scriptBase}.${sampleID}.sh
+        rm -rf ${scriptName} || true
+        touch ${scriptName}
+
+        echo "#!/bin/bash" >> ${scriptName}
+        echo "#SBATCH -p compute" >> ${scriptName}
+        echo "#SBATCH --mem=${mem}" >> ${scriptName}
+        echo "#SBATCH --ntasks=${nodes}" >> ${scriptName}
+        echo "#SBATCH --tasks-per-node=${nodes}" >> ${scriptName}
+        echo "#SBATCH -t ${runTime}" >> ${scriptName}
+        echo "#SBATCH -o ${myDir}/OUT/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH -e ${myDir}/ERR/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH --job-name=${jobName}" >> ${scriptName}
+        echo "#SBATCH --account=${userProject}" >> ${scriptName}
+
+        echo "module load picard/2.20.2" >> ${scriptName}
+        echo "module load java/1.8" >> ${scriptName}
+        echo "module load samtools/1.9" >> ${scriptName}
+
+        echo "mkdir -p ${myDir}/../output/${sampleID}/markduplicates/" >> ${scriptName}
+
+        ## run the markduplicate and samtools sort commands
+
+	echo "java -jar /software/genomics/picard/2.20.2/INSTALL/picard.jar MarkDuplicates I=${myDir}/../output/${sampleID}/star/{sampleID}.onemap.Aligned.sortedByCoord.out.bam O=${myDir}/../output/${sampleID}/markduplicates/${sampleID}.markdup.bam M=${myDir}/../output/${sampleID}/markduplicates/${sampleID}.metrics.markdup.txt REMOVE_DUPLICATES=false VALIDATION_STRINGENCY=SILENT" >> ${scriptName}
+
+	echo "java -jar /software/genomics/picard/2.20.2/INSTALL/picard.jar MarkDuplicates I=${myDir}/../output/${sampleID}/star/${sampleID}.onemap.Aligned.sortedByCoord.out.bam O=${myDir}/../output/${sampleID}/markduplicates/${sampleID}.rmdup.bam M=${myDir}/../output/${sampleID}/markduplicates/${sampleID}.metrics.rmdup.txt REMOVE_DUPLICATES=true VALIDATION_STRINGENCY=SILENT" >> ${scriptName}
+
+	echo "samtools index ${myDir}/../output/${sampleID}/markduplicates/${sampleID}.markdup.bam" >> ${scriptName}
+	echo "samtools index ${myDir}/../output/${sampleID}/markduplicates/${sampleID}.rmdup.bam" >> ${scriptName}
+
+        chmod u+x ${scriptName}
+
+        sbatch ${scriptName}
+done

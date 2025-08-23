@@ -1,0 +1,43 @@
+#!/bin/bash
+
+sampleIDs=("ERR2704713_subset")
+
+userProject="scw1557"
+mem="40G"
+nodes="4"
+runTime="00:25:00"
+
+myDir=$(pwd)
+scriptBase="04"
+jobName="ADmap"
+
+
+for sampleID in "${sampleIDs[@]}"
+do
+	scriptName=${myDir}/../temp/${scriptBase}.${sampleID}.sh
+	rm -rf ${scriptName} || true
+	touch ${scriptName}
+
+	echo "#!/bin/bash" >> ${scriptName} 
+        echo "#SBATCH -p compute" >> ${scriptName}
+        echo "#SBATCH --mem=${mem}" >> ${scriptName}
+        echo "#SBATCH --ntasks=${nodes}" >> ${scriptName}
+        echo "#SBATCH --tasks-per-node=${nodes}" >> ${scriptName}
+        echo "#SBATCH -t ${runTime}" >> ${scriptName}
+        echo "#SBATCH -o ${myDir}/OUT/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH -e ${myDir}/ERR/${scriptBase}${jobName}.%J" >> ${scriptName}
+        echo "#SBATCH --job-name=${jobName}" >> ${scriptName}
+        echo "#SBATCH --account=${userProject}" >> ${scriptName}
+
+        echo "module load STAR/2.7.0e" >> ${scriptName}
+
+	echo "mkdir -p ${myDir}/../output/${sampleID}/star/" >> ${scriptName}	
+
+	## run the star mapping command
+
+	echo "STAR --readFilesCommand zcat --outSAMunmapped Within KeepPairs --outMultimapperOrder Random --outSAMmultNmax 1 --runThreadN ${nodes} --runMode alignReads --quantMode GeneCounts --outSAMtype BAM SortedByCoordinate --outFileNamePrefix ${myDir}/../output/${sampleID}/star/${sampleID}.onemap. --genomeDir ${myDir}/../resources/ --readFilesIn ${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim_1.fq.gz ${myDir}/../output/${sampleID}/trimmomatic/${sampleID}.trim_2.fq.gz" >> ${scriptName}
+
+	chmod u+x ${scriptName}
+
+	sbatch ${scriptName}
+done

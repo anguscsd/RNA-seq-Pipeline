@@ -6,7 +6,7 @@ The workflow demonstrates key steps in a typical next-generation sequencing (NGS
 ---
 
 ## Project Overview
-This project focuses on building a **reproducible RNA-seq pipeline** using publicly available datasets and widely adopted bioinformatics tools.  
+This project focuses on building a **reproducible RNA-seq pipeline** using publicly available ENA datasets and widely adopted bioinformatics tools.  
 The pipeline processes paired-end reads, performs quality control, aligns reads to a reference genome, marks duplicates, and prepares the data for downstream analyses such as **gene expression quantification** and **splicing detection**.
 
 ---
